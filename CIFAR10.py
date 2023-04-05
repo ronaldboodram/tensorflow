@@ -35,6 +35,8 @@ def wrangle_data(data, split, batch_size=32):
 
     return data
 
+# Create a model that uses a ResNet model. add the output layer and the input layer to it.
+
 def dnn_model():
     new_model = tf.keras.Sequential([
         tf.keras.layers.InputLayer((32, 32, 3)),
