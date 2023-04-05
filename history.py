@@ -29,6 +29,11 @@ def plot_history(history, metrics=None):
     plt.show()
 
 
-def add_history():
+def add_history(old_hist, new_hist):
+    old_hist.epoch.extend(new_hist.epoch)
+    old_hist.params = new_hist.params
+    for k in old_hist.history.keys():
+        old_hist.history[k].extend(new_hist.history[k])
+
 
 
