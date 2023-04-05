@@ -75,4 +75,4 @@ if __name__ == '__main__':
     # Train the model
     history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
 
-    #Evaluate the model
+    # Evaluate the model
