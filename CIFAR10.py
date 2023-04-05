@@ -2,7 +2,7 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 import os
 import json
-#from history import plot_history, add_history
+from history import plot_history, add_history
 
 
 os.environ['TF_CPP_MIN_LOG_LEVEL']= '2'
@@ -50,7 +50,20 @@ def compile_model(new_model):
     print(new_model.summary())
     return new_model
 
+def save_model(model, name, history, test_data):
+    test_loss, test_acc = model.evaluate(test_data)
 
+    # Save model information
+    save_name = f'models/cifar10-{name}-{len(history.epoch):02d}-{test_acc * 100:.2f}'
+    model.save(f'{save_name}.h5')
+
+    # Save history information
+    hist_out = {}
+    hist_out['epoch'] = history.epoch
+    hist_out['history'] = history.history
+    hist_out['params'] = history.params
+    with open(f'{save_name}.history', 'w') as outfile:
+        json.dump(hist_out,outfile)
 
 if __name__ == '__main__':
     # Prepare the data
@@ -76,3 +89,8 @@ if __name__ == '__main__':
     history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
 
     # Evaluate the model
+    test_loss, test_acc = model.evaluate(test_data)
+    print(f'Test accuracy: {test_acc * 100:.2f}%')
+
+    # Save model information
+    save_model(model, model_name, history, test_data)
