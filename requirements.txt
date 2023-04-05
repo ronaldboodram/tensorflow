@@ -1,0 +1,8 @@
+tensorflow
+tensorflow-datasets
+Pillow
+pandas
+numpy
+scipy
+urllib3
+matplotlib=
