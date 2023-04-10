@@ -3,16 +3,17 @@ from kfp.v2.dsl import component, pipeline, Artifact, ClassificationMetrics, Inp
 
 
 project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
-#pipeline_root_path = 'gs://tfds-dir1/test_ds'
+#pipeline_root_path = 'gs://tfds-dir1'
 pipeline_root_path = 'gs://pipeline-tester1'
 
 
 @component(
-packages_to_install = ["tensorflow", "tensorflow-datasets"]
+packages_to_install = ["tensorflow", "tensorflow-datasets"],
+output_component_file="ingest_data.yaml"
 )
 def ingest_data() -> str:
     import tensorflow_datasets as tfds
-    #bucket = 'gs://tfds-dir/test_ds1'
+    #bucket = 'gs://tfds-dir1'
     bucket = 'gs://pipeline-tester1'
 
     validation_split = 10
@@ -28,9 +29,10 @@ def ingest_data() -> str:
     return bucket
 
 @component(
-packages_to_install = ["tensorflow"]
+packages_to_install = ["tensorflow"],
+output_component_file="create_model.yaml"
 )
-def create_model() -> str:
+def create_model(text: str) -> str:
     import tensorflow as tf
     #bucket = 'gs://tfds-dir/test_ds1'
     bucket = 'gs://pipeline-tester1'
@@ -48,28 +50,31 @@ def create_model() -> str:
 
 
 @component(
-packages_to_install = ["tensorflow",  "tensorflow-datasets"]
+packages_to_install = ["tensorflow",  "tensorflow-datasets"],
+output_component_file="train_model.yaml"
 )
-def train_model() -> str:
+def train_model(test: str) -> str:
     import tensorflow as tf
     import tensorflow_datasets as tfds
+    #bucket = 'gs://tfds-dir/test_ds1'
+    bucket = 'gs://pipeline-tester1'
 
     #load data from gcs bucket
     model_name = 'ResNet model'
-    train_data = tfds.load("gs://tfds-dir/train_ds")
+    train_data = tfds.load(bucket+"/train/cifar10/")
     train_data = train_data.map(lambda f, l: (tf.cast(f,tf.float64) / 255, l))
     train_data = train_data.shuffle(buffer_size=5000)
 
-    valid_data = tfds.load("gs://tfds-dir/validation_ds")
+    valid_data = tfds.load(bucket+"/valid/cifar10/")
     #test_data = tfds.load("gs://tfds-dir/test_ds")
 
     #load model from gcs
-    model = tf.keras.models.load_model('gs://tfds-dir/model/saved_model.pb')
+    model = tf.keras.models.load_model(bucket+'/model')
 
     # Create training callbacks
     earlystop = tf.keras.callbacks.EarlyStopping('val_loss', patience=5, restore_best_weights=True)
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
-        filepath=f'ckpts/cifar10-{model_name}-'+ '{epoch:02d}-{val_accuracy:.4f}')
+        filepath= bucket+'/cifar10-{model_name}-'+ '{epoch:02d}-{val_accuracy:.4f}')
 
     # Train the model
     history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
@@ -83,14 +88,15 @@ def train_model() -> str:
     description='testing pipeline',
     pipeline_root=pipeline_root_path
 )
-def ingestion_test():
+def model_test():
     ingestion_task = ingest_data()
-    create_model_task = create_model()
+    create_model_task = create_model(ingestion_task.output)
+    train_model_task = train_model(create_model_task.output)
 
 
 if __name__ == '__main__':
 
     compiler.Compiler().compile(
-        pipeline_func=ingestion_test,
+        pipeline_func=model_test,
         package_path='pipeline.json'
     )
