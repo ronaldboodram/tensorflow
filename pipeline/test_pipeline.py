@@ -2,6 +2,9 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 import os
 import json
+from keras import applications
+from keras.layers import Dense, Dropout, GlobalAveragePooling2D
+from keras.models import Model
 from history import plot_history, add_history
 
 
@@ -12,6 +15,7 @@ def retrieve_data():
     print(cifar10_info)
     print(f'Classes:{cifar10_info.features["label"].names}')
     print(test_ds.element_spec)
+
     return test_ds, cifar10_info
 
 def get_training_data(validation_split=10):
@@ -38,7 +42,7 @@ def wrangle_data(data, split, batch_size=32):
 
 def dnn_model():
     new_model = tf.keras.Sequential([
-        tf.keras.layers.InputLayer((32, 32, 3)),
+        applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(128, activation='relu'),
         tf.keras.layers.Dense(64, activation='relu'),

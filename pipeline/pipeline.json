@@ -1,0 +1,106 @@
+{
+  "pipelineSpec": {
+    "components": {
+      "comp-create-model": {
+        "executorLabel": "exec-create-model",
+        "outputDefinitions": {
+          "parameters": {
+            "Output": {
+              "type": "STRING"
+            }
+          }
+        }
+      },
+      "comp-ingest-data": {
+        "executorLabel": "exec-ingest-data",
+        "outputDefinitions": {
+          "parameters": {
+            "Output": {
+              "type": "STRING"
+            }
+          }
+        }
+      }
+    },
+    "deploymentSpec": {
+      "executors": {
+        "exec-create-model": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "create_model"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow' 'kfp==1.8.9' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef create_model() -> str:\n    import tensorflow as tf\n    #bucket = 'gs://tfds-dir/test_ds1'\n    bucket = 'gs://pipeline-tester1'\n    new_model = tf.keras.Sequential([\n        tf.keras.layers.InputLayer((32, 32, 3)),\n        tf.keras.layers.Flatten(),\n        tf.keras.layers.Dense(128, activation='relu'),\n        tf.keras.layers.Dense(64, activation='relu'),\n        tf.keras.layers.Dense(10, activation='softmax')\n    ])\n    new_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])\n    print(new_model.summary())\n    new_model.save(bucket+\"/model\")\n    return \"model saved at\" + bucket\n\n"
+            ],
+            "image": "python:3.7"
+          }
+        },
+        "exec-ingest-data": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "ingest_data"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow' 'tensorflow-datasets' 'kfp==1.8.9' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef ingest_data() -> str:\n    import tensorflow_datasets as tfds\n    #bucket = 'gs://tfds-dir/test_ds1'\n    bucket = 'gs://pipeline-tester1'\n\n    validation_split = 10\n    #test_ds, cifar10_info = tfds.load('cifar10', split='test', with_info=True, as_supervised=True, shuffle_files=True, data_dir=\"gs://tfds-dir\")\n    test_ds = tfds.load('cifar10', split='test', as_supervised=True, shuffle_files=True, data_dir=bucket + \"/test\", try_gcs=True)\n\n    validation_ds = tfds.load('cifar10', split=f'train[:{validation_split}%]', as_supervised=True, data_dir=bucket + \"/valid\", try_gcs=True)\n    training_ds = tfds.load('cifar10', split=f'train[{validation_split}%:]', as_supervised=True, data_dir=bucket + \"/train\", try_gcs=True)\n\n    #print(f'Classes:{cifar10_info.features[\"label\"].names}')\n    print(test_ds.element_spec)\n\n    return bucket\n\n"
+            ],
+            "image": "python:3.7"
+          }
+        }
+      }
+    },
+    "pipelineInfo": {
+      "name": "pipeline"
+    },
+    "root": {
+      "dag": {
+        "tasks": {
+          "create-model": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-create-model"
+            },
+            "taskInfo": {
+              "name": "create-model"
+            }
+          },
+          "ingest-data": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-ingest-data"
+            },
+            "taskInfo": {
+              "name": "ingest-data"
+            }
+          }
+        }
+      }
+    },
+    "schemaVersion": "2.0.0",
+    "sdkVersion": "kfp-1.8.9"
+  },
+  "runtimeConfig": {
+    "gcsOutputDirectory": "gs://pipeline-tester1"
+  }
+}
