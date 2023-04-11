@@ -102,20 +102,24 @@ def train_model(text: str) -> str:
     train_data = tf.data.Dataset.load(bucket + "/train_ds")
     train_data = train_data.map(lambda f, l: (tf.cast(f, tf.float64) / 255, l))
     train_data = train_data.shuffle(buffer_size=5000)
+    print("\n\n finish loading training data \n\n")
 
-    valid_data = tfds.load(bucket + "/valid_ds")
-    test_data = tfds.load(bucket + "/test_ds")
+    valid_data = tf.data.Dataset.load(bucket + "/valid_ds")
+    print("\n\n finish loading validation data \n\n")
+    test_data = tf.data.Dataset.load(bucket + "/test_ds")
+    print("\n\n finish loading test data \n\n")
 
     # load model from gcs
     model = tf.keras.models.load_model(bucket + '/model')
 
     # Create training callbacks
-    earlystop = tf.keras.callbacks.EarlyStopping('val_loss', patience=5, restore_best_weights=True)
-    checkpoint = tf.keras.callbacks.ModelCheckpoint(
-        filepath=bucket + '/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
+    # earlystop = tf.keras.callbacks.EarlyStopping('val_loss', patience=5, restore_best_weights=True)
+    # checkpoint = tf.keras.callbacks.ModelCheckpoint(
+    #     filepath=bucket + '/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
 
     # Train the model
-    history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
+    # history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
+    history = model.fit(train_data, validation_data=valid_data, epochs=10)
 
     return "model trained"
 
