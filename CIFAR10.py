@@ -84,7 +84,7 @@ if __name__ == '__main__':
     # Create training callbacks
     earlystop = tf.keras.callbacks.EarlyStopping('val_loss', patience=5, restore_best_weights=True)
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
-        filepath=f'ckpts/cifar10-{model_name}-'+ '{epoch:02d}-{val_accuracy:.4f}')
+        filepath=f'ckpts/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
 
     # Train the model
     history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])

@@ -14,33 +14,50 @@ def train_model() -> str:
     import numpy as np
     import tensorflow as tf
 
-    # bucket = 'gs://tfds-dir/test_ds1'
-    bucket = 'gs://pipeline-tester1'
+    import tensorflow_datasets as tfds
+    import numpy as np
+    import tensorflow as tf
+
+    bucket = 'gs://tfds-dir1'
+    # bucket = 'gs://pipeline-tester1'
+
+    # batch size
+    batch_size = 32
 
     # load data from gcs bucket
     model_name = 'ResNet model'
     train_data = tf.data.Dataset.load(bucket + "/train_ds")
     train_data = train_data.map(lambda f, l: (tf.cast(f, tf.float64) / 255, l))
     train_data = train_data.shuffle(buffer_size=5000)
+    train_data = train_data.batch(batch_size).prefetch(tf.data.AUTOTUNE)
     print("\n\n finish loading training data \n\n")
 
     valid_data = tf.data.Dataset.load(bucket + "/valid_ds")
+    valid_data = valid_data.batch(batch_size).prefetch(tf.data.AUTOTUNE)
     print("\n\n finish loading validation data \n\n")
     test_data = tf.data.Dataset.load(bucket + "/test_ds")
+    test_data = test_data.batch(batch_size).prefetch(tf.data.AUTOTUNE)
     print("\n\n finish loading test data \n\n")
 
     # load model from gcs
     model = tf.keras.models.load_model(bucket + '/model')
-    print("\n\n finish loading model from gcs \n\n")
 
     # Create training callbacks
-    # earlystop = tf.keras.callbacks.EarlyStopping('val_loss', patience=5, restore_best_weights=True)
-    # checkpoint = tf.keras.callbacks.ModelCheckpoint(
-    #     filepath=bucket + '/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
+    earlystop = tf.keras.callbacks.EarlyStopping('val_loss', patience=5, restore_best_weights=True)
+    checkpoint = tf.keras.callbacks.ModelCheckpoint(
+        filepath=bucket + f'/ckpts/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
 
     # Train the model
-    # history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
-    history = model.fit(train_data, validation_data=valid_data, epochs=10)
+    history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
+    # history = model.fit(train_data, validation_data=valid_data, epochs=10)
+    print('\n\n history\n' + history + '\n\n')
+
+    # Evaluate the model
+    test_loss, test_acc = model.evaluate(test_data)
+    print('\n\n' + f'Test accuracy: {test_acc * 100:.2f}%' + '\n\n')
+
+    # Save the model
+    model.save(bucket + "/resnet_ model")
 
     return "model trained"
 @pipeline(

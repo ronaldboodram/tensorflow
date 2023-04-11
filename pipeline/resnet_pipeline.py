@@ -2,8 +2,10 @@ from kfp.v2 import compiler, dsl
 from kfp.v2.dsl import component, pipeline, Artifact, ClassificationMetrics, Input, Output, Model, Metrics, Dataset
 
 project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
-# pipeline_root_path = 'gs://tfds-dir1'
-pipeline_root_path = 'gs://pipeline-tester1'
+pipeline_root_path = 'gs://tfds-dir1'
+
+
+# pipeline_root_path = 'gs://pipeline-tester1'
 
 
 # edit the pipeline.json file to remove the automatic install of kfp 1.8.9 which casues conflict with tensorflow 2.11
@@ -19,8 +21,8 @@ def ingest_data() -> str:
     print("\n\n" + "Tfds version is: " + tfds.__version__ + "\n\n")
 
     validation_split = 10
-    # bucket = 'gs://tfds-dir1'
-    bucket = 'gs://pipeline-tester1'
+    bucket = 'gs://tfds-dir1'
+    # bucket = 'gs://pipeline-tester1'
 
     # test_ds, cifar10_info = tfds.load('cifar10', split='test', with_info=True, as_supervised=True, shuffle_files=True, data_dir="gs://tfds-dir")
     # test_ds = tfds.load('cifar10', split='test', as_supervised=True, shuffle_files=True, data_dir=bucket + "/test", try_gcs=True)
@@ -56,8 +58,8 @@ def load_data(text: str) -> str:
     import numpy as np
     import tensorflow as tf
 
-    # bucket = 'gs://tfds-dir1'
-    bucket = 'gs://pipeline-tester1'
+    bucket = 'gs://tfds-dir1'
+    # bucket = 'gs://pipeline-tester1'
 
     new_dataset = tf.data.Dataset.load(bucket + "/train1")
 
@@ -65,15 +67,17 @@ def load_data(text: str) -> str:
 
 
 @component(
-    packages_to_install=["tensorflow"]
+    packages_to_install=['tensorflow==2.11.0', 'keras']
 )
 def create_model(test: str) -> str:
     import tensorflow as tf
-    # bucket = 'gs://tfds-dir1'
-    bucket = 'gs://pipeline-tester1'
+    from keras import applications
+
+    bucket = 'gs://tfds-dir1'
+    # bucket = 'gs://pipeline-tester1'
 
     new_model = tf.keras.Sequential([
-        tf.keras.layers.InputLayer((32, 32, 3)),
+        applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(128, activation='relu'),
         tf.keras.layers.Dense(64, activation='relu'),
@@ -81,12 +85,12 @@ def create_model(test: str) -> str:
     ])
     new_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     print(new_model.summary())
-    new_model.save(bucket+"/model")
+    new_model.save(bucket + "/model")
     return "model saved:" + bucket
 
 
 @component(
-    packages_to_install=["tensorflow", "tensorflow-datasets"],
+    packages_to_install=['tensorflow==2.11.0', 'tensorflow-datasets'],
     output_component_file="train_model.yaml"
 )
 def train_model(text: str) -> str:
@@ -94,8 +98,8 @@ def train_model(text: str) -> str:
     import numpy as np
     import tensorflow as tf
 
-    # bucket = 'gs://tfds-dir/test_ds1'
-    bucket = 'gs://pipeline-tester1'
+    bucket = 'gs://tfds-dir1'
+    # bucket = 'gs://pipeline-tester1'
 
     # batch size
     batch_size = 32
@@ -119,17 +123,23 @@ def train_model(text: str) -> str:
     model = tf.keras.models.load_model(bucket + '/model')
 
     # Create training callbacks
-    # earlystop = tf.keras.callbacks.EarlyStopping('val_loss', patience=5, restore_best_weights=True)
-    # checkpoint = tf.keras.callbacks.ModelCheckpoint(
-    #     filepath=bucket + '/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
+    earlystop = tf.keras.callbacks.EarlyStopping('val_loss', patience=5, restore_best_weights=True)
+    checkpoint = tf.keras.callbacks.ModelCheckpoint(
+        filepath=bucket + f'/ckpts/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
 
     # Train the model
-    # history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
-    history = model.fit(train_data, validation_data=valid_data, epochs=10)
+    history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
+    #history = model.fit(train_data, validation_data=valid_data, epochs=10)
+    print('\n\n history\n' + history + '\n\n')
+
+    # Evaluate the model
+    test_loss, test_acc = model.evaluate(test_data)
+    print('\n\n'  + f'Test accuracy: {test_acc * 100:.2f}%' + '\n\n')
+
+    #Save the model
+    model.save(bucket + "/resnet_ model")
 
     return "model trained"
-
-
 @pipeline(
     name='pipeline',
     description='testing pipeline',
