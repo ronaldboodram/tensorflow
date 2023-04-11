@@ -81,7 +81,7 @@ def create_model(test: str) -> str:
     ])
     new_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     print(new_model.summary())
-    new_model.save("gs://pipeline-tester/model")
+    new_model.save(bucket+"/model")
     return "model saved:" + bucket
 
 
