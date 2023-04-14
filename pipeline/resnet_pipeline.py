@@ -1,11 +1,11 @@
 from kfp.v2 import compiler, dsl
 from kfp.v2.dsl import component, pipeline, Artifact, ClassificationMetrics, Input, Output, Model, Metrics, Dataset
+from google.cloud import aiplatform
+from google_cloud_pipeline_components import aiplatform as gcc_aip
 
 project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
-pipeline_root_path = 'gs://tfds-dir1'
-
-
-# pipeline_root_path = 'gs://pipeline-tester1'
+pipeline_root_path = 'gs://tfds-dir2'
+# pipeline_root_path = 'gs://pipeline-tester2'
 
 
 # edit the pipeline.json file to remove the automatic install of kfp 1.8.9 which casues conflict with tensorflow 2.11
@@ -21,8 +21,8 @@ def ingest_data() -> str:
     print("\n\n" + "Tfds version is: " + tfds.__version__ + "\n\n")
 
     validation_split = 10
-    bucket = 'gs://tfds-dir1'
-    # bucket = 'gs://pipeline-tester1'
+    bucket = 'gs://tfds-dir2'
+    # bucket = 'gs://pipeline-tester2'
 
     # test_ds, cifar10_info = tfds.load('cifar10', split='test', with_info=True, as_supervised=True, shuffle_files=True, data_dir="gs://tfds-dir")
     # test_ds = tfds.load('cifar10', split='test', as_supervised=True, shuffle_files=True, data_dir=bucket + "/test", try_gcs=True)
@@ -58,8 +58,8 @@ def load_data(text: str) -> str:
     import numpy as np
     import tensorflow as tf
 
-    bucket = 'gs://tfds-dir1'
-    # bucket = 'gs://pipeline-tester1'
+    bucket = 'gs://tfds-dir2'
+    # bucket = 'gs://pipeline-tester2'
 
     new_dataset = tf.data.Dataset.load(bucket + "/train1")
 
@@ -73,8 +73,8 @@ def create_model(test: str) -> str:
     import tensorflow as tf
     from keras import applications
 
-    bucket = 'gs://tfds-dir1'
-    # bucket = 'gs://pipeline-tester1'
+    bucket = 'gs://tfds-dir2'
+    # bucket = 'gs://pipeline-tester2'
 
     new_model = tf.keras.Sequential([
         applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
@@ -98,8 +98,8 @@ def train_model(text: str) -> str:
     import numpy as np
     import tensorflow as tf
 
-    bucket = 'gs://tfds-dir1'
-    # bucket = 'gs://pipeline-tester1'
+    bucket = 'gs://tfds-dir2'
+    # bucket = 'gs://pipeline-tester2'
 
     # batch size
     batch_size = 32

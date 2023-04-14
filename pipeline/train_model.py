@@ -2,11 +2,13 @@ from kfp.v2 import compiler, dsl
 from kfp.v2.dsl import component, pipeline, Artifact, ClassificationMetrics, Input, Output, Model, Metrics, Dataset
 
 project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
-# pipeline_root_path = 'gs://tfds-dir1'
-pipeline_root_path = 'gs://pipeline-tester1'
+# pipeline_root_path = 'gs://tfds-dir2'
+pipeline_root_path = 'gs://pipeline-tester2'
+
 
 @component(
-    packages_to_install=["tensorflow", "tensorflow-datasets"],
+    base_image='gcr.io/deeplearning-platform-release/tf-gpu.2-11',
+    packages_to_install=["tensorflow==2.11.0", "tensorflow-datasets"],
     output_component_file="train_model.yaml"
 )
 def train_model() -> str:
@@ -18,8 +20,11 @@ def train_model() -> str:
     import numpy as np
     import tensorflow as tf
 
-    bucket = 'gs://tfds-dir1'
-    # bucket = 'gs://pipeline-tester1'
+    #check for GPU:
+    print('\n\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))
+    print('\n\n')
+    bucket = 'gs://tfds-dir2'
+    # bucket = 'gs://pipeline-tester2'
 
     # batch size
     batch_size = 32
@@ -60,13 +65,15 @@ def train_model() -> str:
     model.save(bucket + "/resnet_ model")
 
     return "model trained"
+
+
 @pipeline(
     name='pipeline',
     description='testing pipeline',
     pipeline_root=pipeline_root_path
 )
 def ingestion_test():
-        train_model_task = train_model()
+    train_model_task = train_model()
 
 
 if __name__ == '__main__':
