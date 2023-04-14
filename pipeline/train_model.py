@@ -5,7 +5,6 @@ project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
 # pipeline_root_path = 'gs://tfds-dir2'
 pipeline_root_path = 'gs://pipeline-tester2'
 
-
 @component(
     base_image='gcr.io/deeplearning-platform-release/tf-gpu.2-11',
     packages_to_install=["tensorflow==2.11.0", "tensorflow-datasets"],
