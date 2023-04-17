@@ -1,5 +1,6 @@
 from kfp.v2 import compiler, dsl
 from kfp.v2.dsl import component, pipeline, Artifact, ClassificationMetrics, Input, Output, Model, Metrics, Dataset
+from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
 
 project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
 # pipeline_root_path = 'gs://tfds-dir2'
@@ -22,8 +23,8 @@ def train_model() -> str:
     #check for GPU:
     print('\n\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))
     print('\n\n')
-    bucket = 'gs://tfds-dir2'
-    # bucket = 'gs://pipeline-tester2'
+    bucket = 'gs://tfds-dir3'
+    # bucket = 'gs://pipeline-tester3'
 
     # batch size
     batch_size = 32
@@ -66,17 +67,29 @@ def train_model() -> str:
     return "model trained"
 
 
-@pipeline(
+#convert above component into a cusotm training job
+custom_training_job = create_custom_training_job_from_component(
+    train_model,
+    display_name = 'Training Op',
+    machine_type = 'n1-standard-32',
+    accelerator_type='NVIDIA_TESLA_K80',
+    accelerator_count='4'
+)
+
+@dsl.pipeline(
     name='pipeline',
     description='testing pipeline',
     pipeline_root=pipeline_root_path
 )
-def ingestion_test():
-    train_model_task = train_model()
+def pipeline():
+    train_model_task = custom_training_job(
+        project='tensor-1-1',
+        location='us-central1'
+    )
 
 
 if __name__ == '__main__':
     compiler.Compiler().compile(
-        pipeline_func=ingestion_test,
-        package_path='pipeline.json'
+        pipeline_func=pipeline,
+        package_path='training_op_pipeline.json'
     )
