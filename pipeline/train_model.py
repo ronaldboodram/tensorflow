@@ -55,7 +55,7 @@ def train_model() -> str:
     # Train the model
     history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
     # history = model.fit(train_data, validation_data=valid_data, epochs=10)
-    print('\n\n history\n' + history + '\n\n')
+    print('\n\n history\n' + str(history) + '\n\n')
 
     # Evaluate the model
     test_loss, test_acc = model.evaluate(test_data)
