@@ -91,10 +91,11 @@ custom_training_job = create_custom_training_job_from_component(
     pipeline_root=pipeline_root_path
 )
 def pipeline():
-    train_model_task = custom_training_job(
-        project='tensor-1-1',
-        location='us-central1'
-    )
+    train_model_task = train_model().set_accelerator_type('NVIDIA_TESLA_K80').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(2)
+    # train_model_task = custom_training_job(
+    #     project='tensor-1-1',
+    #     location='us-central1'
+    # )
 
 
 if __name__ == '__main__':

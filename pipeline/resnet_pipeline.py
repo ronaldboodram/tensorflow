@@ -11,11 +11,7 @@ pipeline_root_path = 'gs://tfds-dir3'
 @dsl.component(
     packages_to_install=['tensorflow==2.11.0', 'tensorflow-datasets', 'numpy==1.21.6']
 )
-def ingest_data() -> NamedTuple(
-    'ingest_dataOutput',
-    [
-        ('text', str)
-    ]):
+def ingest_data() -> str:
     import tensorflow_datasets as tfds
     import numpy as np
     import tensorflow as tf
@@ -168,7 +164,7 @@ def train_model(text: str) -> str:
 def ingestion_test():
     ingestion_task = ingest_data()
     # load_data_task = load_data(ingestion_task.output)
-    create_model_task = create_model(text=ingestion_task.outputs['text']).set_accelerator_type('NVIDIA_TESLA_K80').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(1)
+    create_model_task = create_model(text=ingestion_task.output).set_accelerator_type('NVIDIA_TESLA_K80').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(1)
     #     text=ingestion_task.outputs['text'],
     #     project='tensor-1-1')
     # create_model_task = (
