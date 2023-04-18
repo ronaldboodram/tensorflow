@@ -6,7 +6,7 @@ project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
 # pipeline_root_path = 'gs://tfds-dir2'
 pipeline_root_path = 'gs://pipeline-tester2'
 
-@component(
+@dsl.component(
     base_image='gcr.io/deeplearning-platform-release/tf-gpu.2-11',
     packages_to_install=["tensorflow==2.11.0", "tensorflow-datasets"],
     output_component_file="train_model.yaml"
@@ -23,11 +23,16 @@ def train_model() -> str:
     #check for GPU:
     print('\n\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))
     print('\n\n')
+
+    #Multi GPU strategy
+    strategy = tf.distribute.MirroredStrategy()
+
+    #Storage buckets
     bucket = 'gs://tfds-dir3'
     # bucket = 'gs://pipeline-tester3'
 
     # batch size
-    batch_size = 32
+    batch_size = 32 * strategy.num_replicas_in_sync
 
     # load data from gcs bucket
     model_name = 'ResNet model'
@@ -52,14 +57,18 @@ def train_model() -> str:
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         filepath=bucket + f'/ckpts/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
 
-    # Train the model
-    history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
-    # history = model.fit(train_data, validation_data=valid_data, epochs=10)
-    print('\n\n history\n' + str(history) + '\n\n')
 
-    # Evaluate the model
-    test_loss, test_acc = model.evaluate(test_data)
-    print('\n\n' + f'Test accuracy: {test_acc * 100:.2f}%' + '\n\n')
+    with strategy.scope():
+        # Train the model
+        # history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
+        # history = model.fit(train_data, validation_data=valid_data, epochs=10)
+        # print('\n\n history\n' + str(history) + '\n\n')
+        model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
+
+
+        # Evaluate the model
+        test_loss, test_acc = model.evaluate(test_data)
+        print('\n\n' + f'Test accuracy: {test_acc * 100:.2f}%' + '\n\n')
 
     # Save the model
     model.save(bucket + "/resnet_ model")
@@ -71,9 +80,9 @@ def train_model() -> str:
 custom_training_job = create_custom_training_job_from_component(
     train_model,
     display_name = 'Training Op',
-    machine_type = 'n1-standard-32',
+    machine_type = 'n1-standard-16',
     accelerator_type='NVIDIA_TESLA_K80',
-    accelerator_count='4'
+    accelerator_count='2'
 )
 
 @dsl.pipeline(
