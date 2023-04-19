@@ -147,9 +147,9 @@ def train_model(text: str) -> str:
         filepath=bucket + f'/ckpts/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
 
     # Train the model
-    history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
+    history = model.fit(train_data, validation_data=valid_data, epochs=30, callbacks=[earlystop, checkpoint])
     #history = model.fit(train_data, validation_data=valid_data, epochs=10)
-    print('\n\n history\n' + history + '\n\n')
+    print('\n\n history\n' + str(history) + '\n\n')
 
     # Evaluate the model
     test_loss, test_acc = model.evaluate(test_data)
@@ -178,7 +178,7 @@ def train_model(text: str) -> str:
 def ingestion_test():
     ingestion_task = ingest_data()
     # load_data_task = load_data(ingestion_task.output)
-    create_model_task = create_model(text=ingestion_task.output).set_accelerator_type('NVIDIA_TESLA_A100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(2)
+    create_model_task = create_model(text=ingestion_task.output).set_accelerator_type('NVIDIA_TESLA_V100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(4)
     #     text=ingestion_task.outputs['text'],
     #     project='tensor-1-1')
     # create_model_task = (
@@ -188,7 +188,7 @@ def ingestion_test():
     #     add_node_selector_constraint('cloud.google.com/gke-accelerator', 'NVIDIA_TESLA_K80'),
     #     set_gpu_limit(2)
     # )
-    train_model_task = train_model(text=create_model_task.output).set_accelerator_type('NVIDIA_TESLA_A100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(2)
+    train_model_task = train_model(text=create_model_task.output).set_accelerator_type('NVIDIA_TESLA_V100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(4)
 
 
 if __name__ == '__main__':

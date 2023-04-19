@@ -3,8 +3,8 @@ from kfp.v2.dsl import component, pipeline, Artifact, ClassificationMetrics, Inp
 from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
 
 project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
-# pipeline_root_path = 'gs://tfds-dir2'
-pipeline_root_path = 'gs://pipeline-tester2'
+# pipeline_root_path = 'gs://tfds-dir3'
+pipeline_root_path = 'gs://pipeline-tester3'
 
 @dsl.component(
     base_image='gcr.io/deeplearning-platform-release/tf-gpu.2-11',
@@ -58,17 +58,17 @@ def train_model() -> str:
         filepath=bucket + f'/ckpts/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
 
 
-    with strategy.scope():
+    #with strategy.scope():
         # Train the model
         # history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
         # history = model.fit(train_data, validation_data=valid_data, epochs=10)
         # print('\n\n history\n' + str(history) + '\n\n')
-        model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
+    model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
 
 
-        # Evaluate the model
-        test_loss, test_acc = model.evaluate(test_data)
-        print('\n\n' + f'Test accuracy: {test_acc * 100:.2f}%' + '\n\n')
+    # Evaluate the model
+    test_loss, test_acc = model.evaluate(test_data)
+    print('\n\n' + f'Test accuracy: {test_acc * 100:.2f}%' + '\n\n')
 
     # Save the model
     model.save(bucket + "/resnet_ model")
@@ -91,7 +91,7 @@ custom_training_job = create_custom_training_job_from_component(
     pipeline_root=pipeline_root_path
 )
 def pipeline():
-    train_model_task = train_model().set_accelerator_type('NVIDIA_TESLA_A100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(1)
+    train_model_task = train_model().set_accelerator_type('NVIDIA_TESLA_K80').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(4)
     # train_model_task = custom_training_job(
     #     project='tensor-1-1',
     #     location='us-central1'
