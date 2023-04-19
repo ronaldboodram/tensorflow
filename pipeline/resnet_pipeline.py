@@ -66,7 +66,8 @@ def load_data(text: str) -> str:
 
 
 @dsl.component(
-    packages_to_install=['tensorflow==2.11.0', 'keras']
+    packages_to_install=['tensorflow==2.11.0', 'keras'],
+    base_image='gcr.io/deeplearning-platform-release/tf-gpu.2-11',
 )
 def create_model(text: str) -> str:
     import tensorflow as tf
@@ -75,36 +76,49 @@ def create_model(text: str) -> str:
     bucket = 'gs://tfds-dir3'
     # bucket = 'gs://pipeline-tester3'
 
-    new_model = tf.keras.Sequential([
-        applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
-        tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dense(64, activation='relu'),
-        tf.keras.layers.Dense(10, activation='softmax')
-    ])
+    # check for GPU:
+    print('\n\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))
+    print('\n\n')
+
+    #Multi GPU strategy
+    strategy = tf.distribute.MirroredStrategy()
+
+    with strategy.scope():
+        new_model = tf.keras.Sequential([
+            applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(128, activation='relu'),
+            tf.keras.layers.Dense(64, activation='relu'),
+            tf.keras.layers.Dense(10, activation='softmax')
+        ])
+
     new_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-
-    print('\n\n' + new_model.summary() + '\n\n')
+    print('\n\n' + str(new_model.summary()) + '\n\n')
     new_model.save(bucket + "/model")
     return "model saved:" + bucket
 
 
 @dsl.component(
     packages_to_install=['tensorflow==2.11.0', 'tensorflow-datasets'],
-    output_component_file="train_model.yaml"
+    output_component_file="train_model.yaml",
+    base_image='gcr.io/deeplearning-platform-release/tf-gpu.2-11',
 )
 def train_model(text: str) -> str:
     import tensorflow_datasets as tfds
     import numpy as np
     import tensorflow as tf
 
-    #Multi GPU strategy
-    strategy = tf.distribute.MirroredStrategy()
+    # check for GPU:
+    print('\n\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))
+    print('\n\n')
 
     #Storage buckets
     bucket = 'gs://tfds-dir3'
     # bucket = 'gs://pipeline-tester3'
+
+    #Multi GPU strategy
+    strategy = tf.distribute.MirroredStrategy()
 
     # batch size
     batch_size = 32 * strategy.num_replicas_in_sync
@@ -164,7 +178,7 @@ def train_model(text: str) -> str:
 def ingestion_test():
     ingestion_task = ingest_data()
     # load_data_task = load_data(ingestion_task.output)
-    create_model_task = create_model(text=ingestion_task.output).set_accelerator_type('NVIDIA_TESLA_K80').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(1)
+    create_model_task = create_model(text=ingestion_task.output).set_accelerator_type('NVIDIA_TESLA_A100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(2)
     #     text=ingestion_task.outputs['text'],
     #     project='tensor-1-1')
     # create_model_task = (
@@ -174,7 +188,7 @@ def ingestion_test():
     #     add_node_selector_constraint('cloud.google.com/gke-accelerator', 'NVIDIA_TESLA_K80'),
     #     set_gpu_limit(2)
     # )
-    train_model_task = train_model(text=create_model_task.output).set_accelerator_type('NVIDIA_TESLA_K80').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(1)
+    train_model_task = train_model(text=create_model_task.output).set_accelerator_type('NVIDIA_TESLA_A100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(2)
 
 
 if __name__ == '__main__':
