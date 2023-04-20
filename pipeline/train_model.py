@@ -63,7 +63,8 @@ def train_model() -> str:
         # history = model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
         # history = model.fit(train_data, validation_data=valid_data, epochs=10)
         # print('\n\n history\n' + str(history) + '\n\n')
-    model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
+    # model.fit(train_data, validation_data=valid_data, epochs=10, callbacks=[earlystop, checkpoint])
+    model.fit(train_data, validation_data=valid_data, epochs=30)
 
 
     # Evaluate the model

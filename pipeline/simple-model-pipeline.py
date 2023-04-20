@@ -2,9 +2,19 @@ from kfp.v2 import compiler, dsl
 from kfp.v2.dsl import component, pipeline, Artifact, ClassificationMetrics, Input, Output, Model, Metrics, Dataset
 #from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
 from typing import NamedTuple
+
+#
+# USES KUBEFLOW 2.0.0B14 SDK API TO CREATE CUSTOM TRAINING JOBS USING GPUs or CPUsWHERE EACH TASK IN A PIPELINE CAN HAVE
+# ITS OWN HARDWARE CONFIGURATION
+# KUBEFLOW SDK API DOES NOT SUPPORT TPU AS YET FOR V2.0.0B14. YOU HAVE TO USE KFP V1.8.20 OR EARLIER ALONG
+# WITH KFP.GCP EXTENSION MODULE
+#
+
+
 project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
-pipeline_root_path = 'gs://tfds-dir3'
-# pipeline_root_path = 'gs://pipeline-tester3'
+
+#pipeline_root_path = 'gs://tfds-dir3'
+pipeline_root_path = 'gs://pipeline-tester3'
 
 
 # edit the pipeline.json file to remove the automatic install of kfp 1.8.9 which casues conflict with tensorflow 2.11
@@ -20,8 +30,8 @@ def ingest_data() -> str:
     print("\n\n" + "Tfds version is: " + tfds.__version__ + "\n\n")
 
     validation_split = 10
-    bucket = 'gs://tfds-dir3'
-    # bucket = 'gs://pipeline-tester3'
+    #bucket = 'gs://tfds-dir3'
+    bucket = 'gs://pipeline-tester3'
 
     # test_ds, cifar10_info = tfds.load('cifar10', split='test', with_info=True, as_supervised=True, shuffle_files=True, data_dir="gs://tfds-dir")
     # test_ds = tfds.load('cifar10', split='test', as_supervised=True, shuffle_files=True, data_dir=bucket + "/test", try_gcs=True)
@@ -49,22 +59,6 @@ def ingest_data() -> str:
     return bucket
 
 
-@component(
-    packages_to_install=['tensorflow==2.11.0', 'tensorflow-datasets', 'numpy==1.21.6']
-)
-def load_data(text: str) -> str:
-    import tensorflow_datasets as tfds
-    import numpy as np
-    import tensorflow as tf
-
-    bucket = 'gs://tfds-dir3'
-    # bucket = 'gs://pipeline-tester3'
-
-    new_dataset = tf.data.Dataset.load(bucket + "/train1")
-
-    return "loaded"
-
-
 @dsl.component(
     packages_to_install=['tensorflow==2.11.0', 'keras'],
     base_image='gcr.io/deeplearning-platform-release/tf-gpu.2-11',
@@ -73,8 +67,8 @@ def create_model(text: str) -> str:
     import tensorflow as tf
     from keras import applications
 
-    bucket = 'gs://tfds-dir3'
-    # bucket = 'gs://pipeline-tester3'
+    #bucket = 'gs://tfds-dir3'
+    bucket = 'gs://pipeline-tester3'
 
     # check for GPU:
     print('\n\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))
@@ -85,7 +79,8 @@ def create_model(text: str) -> str:
 
     with strategy.scope():
         new_model = tf.keras.Sequential([
-            applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
+            # applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
+            tf.keras.layers.InputLayer((32, 32, 3)),
             tf.keras.layers.Flatten(),
             tf.keras.layers.Dense(128, activation='relu'),
             tf.keras.layers.Dense(64, activation='relu'),
@@ -114,8 +109,8 @@ def train_model(text: str) -> str:
     print('\n\n')
 
     #Storage buckets
-    bucket = 'gs://tfds-dir3'
-    # bucket = 'gs://pipeline-tester3'
+    # bucket = 'gs://tfds-dir3'
+    bucket = 'gs://pipeline-tester3'
 
     #Multi GPU strategy
     strategy = tf.distribute.MirroredStrategy()
@@ -171,28 +166,18 @@ def train_model(text: str) -> str:
 # )
 
 @dsl.pipeline(
-    name='resnet-model-pipeline',
+    name='simple-pipeline',
     description='testing pipeline',
     pipeline_root=pipeline_root_path
 )
 def ingestion_test():
     ingestion_task = ingest_data()
-    # load_data_task = load_data(ingestion_task.output)
     create_model_task = create_model(text=ingestion_task.output).set_accelerator_type('NVIDIA_TESLA_V100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(4)
-    #     text=ingestion_task.outputs['text'],
-    #     project='tensor-1-1')
-    # create_model_task = (
-    #     create_model(text=ingestion_task.outputs['text']),
-    #     set_cpu_limit('4'),
-    #     set_memory_limit('16G'),
-    #     add_node_selector_constraint('cloud.google.com/gke-accelerator', 'NVIDIA_TESLA_K80'),
-    #     set_gpu_limit(2)
-    # )
-    train_model_task = train_model(text=create_model_task.output).set_accelerator_type('NVIDIA_TESLA_V100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(4)
+    train_model_task_4_GPUs = train_model(text=create_model_task.output).set_accelerator_type('NVIDIA_TESLA_V100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(4)
 
 
 if __name__ == '__main__':
     compiler.Compiler().compile(
         pipeline_func=ingestion_test,
-        package_path='pipeline.json'
+        package_path='simple-model-pipeline.json'
     )
