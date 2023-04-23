@@ -181,6 +181,7 @@ def train_model(text: str) -> str:
 #     accelerator_count='2'
 # )
 
+
 @dsl.pipeline(
     name='simple-pipeline',
     description='testing pipeline',
