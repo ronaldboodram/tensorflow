@@ -3,18 +3,19 @@ from kfp.v2.dsl import component, pipeline, Artifact, ClassificationMetrics, Inp
 from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
 from typing import NamedTuple
 
-#
+# ***************************
 # USES VERTEX_AI API TO CREATE CUSTOM TRAINING JOBS WHERE EACH TASK IN A PIPELINE CAN HAVE ITS OWN HARDWARE CONFIGURATION
 # KUBEFLOW SDK API DOES NOT SUPPORT TPU AS YET FOR V2.0.0B14. YOU HAVE TO USE KFP V1.8.20 OR EARLIER ALONG
 # WITH KFP.GCP EXTENSION MODULE
-#
+# https://googlecloudplatform.github.io/kubeflow-gke-docs/docs/pipelines/enable-gpu-and-tpu/
+# https://kubeflow-pipelines.readthedocs.io/en/1.8.20/source/kfp.extensions.html
+# ***************************
 
 
 project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
 
 # pipeline_root_path = 'gs://tfds-dir3'
 pipeline_root_path = 'gs://pipeline-tester3'
-
 
 # edit the pipeline.json file to remove the automatic install of kfp 1.8.9 which casues conflict with tensorflow 2.11
 @dsl.component(
@@ -69,7 +70,18 @@ def create_model(text: str) -> NamedTuple(
     ]
 ):
     import tensorflow as tf
-    from keras import applications
+    # from keras import applications
+
+    try:
+        tpu = tf.distribute.cluster_resolver.TPUClusterResolver.connect()
+        print("Device:", tpu.master())
+        strategy = tf.distribute.TPUStrategy(tpu)
+    except:
+        strategy = tf.distribute.get_strategy()
+    print("Number of replicas:", strategy.num_replicas_in_sync)
+
+    # AUTOTUNE = tf.data.AUTOTUNE
+    # BATCH_SIZE = 25 * strategy.num_replicas_in_sync
 
     # bucket = 'gs://tfds-dir3'
     bucket = 'gs://pipeline-tester3'
@@ -81,26 +93,27 @@ def create_model(text: str) -> NamedTuple(
     # Multi GPU strategy
     # strategy = tf.distribute.MirroredStrategy()
 
-    # with strategy.scope():
-    #     new_model = tf.keras.Sequential([
-    #         # applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
-    #         tf.keras.layers.InputLayer((32, 32, 3)),
-    #         tf.keras.layers.Flatten(),
-    #         tf.keras.layers.Dense(128, activation='relu'),
-    #         tf.keras.layers.Dense(64, activation='relu'),
-    #         tf.keras.layers.Dense(10, activation='softmax')
-    #     ])
+    with strategy.scope():
+        new_model = tf.keras.Sequential([
+            # applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
+            tf.keras.layers.InputLayer((32, 32, 3)),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(128, activation='relu'),
+            tf.keras.layers.Dense(64, activation='relu'),
+            tf.keras.layers.Dense(10, activation='softmax')
+        ])
+        new_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-    new_model = tf.keras.Sequential([
-        # applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
-        tf.keras.layers.InputLayer((32, 32, 3)),
-        tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dense(64, activation='relu'),
-        tf.keras.layers.Dense(10, activation='softmax')
-    ])
+    # new_model = tf.keras.Sequential([
+    #     # applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
+    #     tf.keras.layers.InputLayer((32, 32, 3)),
+    #     tf.keras.layers.Flatten(),
+    #     tf.keras.layers.Dense(128, activation='relu'),
+    #     tf.keras.layers.Dense(64, activation='relu'),
+    #     tf.keras.layers.Dense(10, activation='softmax')
+    # ])
 
-    new_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    # new_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
     print('\n\n' + str(new_model.summary()) + '\n\n')
     new_model.save(bucket + "/model")
@@ -117,6 +130,17 @@ def train_model(text: str) -> str:
     import numpy as np
     import tensorflow as tf
 
+    try:
+        tpu = tf.distribute.cluster_resolver.TPUClusterResolver.connect()
+        print("Device:", tpu.master())
+        strategy = tf.distribute.TPUStrategy(tpu)
+    except:
+        strategy = tf.distribute.get_strategy()
+    print("Number of replicas:", strategy.num_replicas_in_sync)
+
+   # AUTOTUNE = tf.data.AUTOTUNE
+    batch_size = 25 * strategy.num_replicas_in_sync
+
     # check for GPU:
     print('\n\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))
     print('\n\n')
@@ -126,11 +150,11 @@ def train_model(text: str) -> str:
     bucket = 'gs://pipeline-tester3'
 
     # Multi GPU strategy
-    strategy = tf.distribute.MirroredStrategy()
+    # strategy = tf.distribute.MirroredStrategy()
 
     # batch size
     # batch_size = 32 * strategy.num_replicas_in_sync
-    batch_size = 32
+    #batch_size = 32
 
     # load data from gcs bucket
     model_name = 'ResNet model'
@@ -175,7 +199,7 @@ custom_create_train_job = create_custom_training_job_from_component(
     train_model,
     display_name='train Op',
     machine_type='cloud-tpu',
-    accelerator_type='TPU_V2',
+    accelerator_type='TPU_V3',
     accelerator_count=8,
     replica_count=1
 )
@@ -184,7 +208,7 @@ custom_create_model_job = create_custom_training_job_from_component(
     create_model,
     display_name='model Op',
     machine_type='cloud-tpu',
-    accelerator_type='TPU_V2',
+    accelerator_type='TPU_V3',
     accelerator_count=8,
     replica_count=1
     # base_output_directory='gs://pipeline-tester3/create_model_output'
@@ -202,11 +226,13 @@ def ingestion_test():
     # create_model_task = create_model(text=ingestion_task.output).set_accelerator_type('NVIDIA_TESLA_V100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(4)
     create_model_task = custom_create_model_job(
         project='tensor-1-1',
+        # location='europe-west4-a',
         location='us-central1',
         text=ingestion_task.output
     )
     training_task = custom_create_train_job(
         project='tensor-1-1',
+        # location='europe-west4-a',
         location='us-central1',
         text=create_model_task.outputs['text']
     )

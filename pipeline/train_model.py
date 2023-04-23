@@ -2,6 +2,17 @@ from kfp.v2 import compiler, dsl
 from kfp.v2.dsl import component, pipeline, Artifact, ClassificationMetrics, Input, Output, Model, Metrics, Dataset
 from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
 
+
+# ***************************
+# USES KUBEFLOW 2.0.0B14 SDK API TO CREATE CUSTOM TRAINING JOBS USING GPUs or CPUsWHERE EACH TASK IN A PIPELINE CAN HAVE
+# ITS OWN HARDWARE CONFIGURATION
+# KUBEFLOW SDK API DOES NOT SUPPORT TPU AS YET FOR V2.0.0B14. YOU HAVE TO USE KFP V1.8.20 OR EARLIER ALONG
+# WITH KFP.GCP EXTENSION MODULE
+# https://googlecloudplatform.github.io/kubeflow-gke-docs/docs/pipelines/enable-gpu-and-tpu/
+# https://kubeflow-pipelines.readthedocs.io/en/1.8.20/source/kfp.extensions.html
+# ***************************
+
+
 project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
 # pipeline_root_path = 'gs://tfds-dir3'
 pipeline_root_path = 'gs://pipeline-tester3'

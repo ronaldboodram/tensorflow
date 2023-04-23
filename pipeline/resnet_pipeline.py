@@ -2,6 +2,17 @@ from kfp.v2 import compiler, dsl
 from kfp.v2.dsl import component, pipeline, Artifact, ClassificationMetrics, Input, Output, Model, Metrics, Dataset
 #from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
 from typing import NamedTuple
+
+# ***************************
+# USES KUBEFLOW 2.0.0B14 SDK API TO CREATE CUSTOM TRAINING JOBS USING GPUs or CPUsWHERE EACH TASK IN A PIPELINE CAN HAVE
+# ITS OWN HARDWARE CONFIGURATION
+# KUBEFLOW SDK API DOES NOT SUPPORT TPU AS YET FOR V2.0.0B14. YOU HAVE TO USE KFP V1.8.20 OR EARLIER ALONG
+# WITH KFP.GCP EXTENSION MODULE
+# https://googlecloudplatform.github.io/kubeflow-gke-docs/docs/pipelines/enable-gpu-and-tpu/
+# https://kubeflow-pipelines.readthedocs.io/en/1.8.20/source/kfp.extensions.html
+# ***************************
+
+
 project_id = 'qwiklabs-gcp-03-6e0d35a97dd4'
 pipeline_root_path = 'gs://tfds-dir3'
 # pipeline_root_path = 'gs://pipeline-tester3'
@@ -85,17 +96,17 @@ def create_model(text: str) -> str:
 
     with strategy.scope():
         new_model = tf.keras.Sequential([
-            applications.ResNet50(weights=None, include_top=False, input_shape=(32, 32, 3)),
-            tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(128, activation='relu'),
-            tf.keras.layers.Dense(64, activation='relu'),
+            applications.ResNet50(weights='imagenet', include_top=False, input_shape=(32, 32, 3)),
+            # tf.keras.layers.Flatten(),
+            # tf.keras.layers.Dense(128, activation='relu'),
+            # tf.keras.layers.Dense(64, activation='relu'),
             tf.keras.layers.Dense(10, activation='softmax')
         ])
 
     new_model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
     print('\n\n' + str(new_model.summary()) + '\n\n')
-    new_model.save(bucket + "/model")
+    new_model.save(bucket + "/untrained-model")
     return "model saved:" + bucket
 
 
@@ -107,7 +118,11 @@ def create_model(text: str) -> str:
 def train_model(text: str) -> str:
     import tensorflow_datasets as tfds
     import numpy as np
+    import os
     import tensorflow as tf
+
+    #os.environ['AIP_TENSORBOARD_LOG_DIR']
+
 
     # check for GPU:
     print('\n\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))
@@ -139,15 +154,22 @@ def train_model(text: str) -> str:
     print("\n\n finish loading test data \n\n")
 
     # load model from gcs
-    model = tf.keras.models.load_model(bucket + '/model')
+    model = tf.keras.models.load_model(bucket + '/untrained-model')
 
     # Create training callbacks
     earlystop = tf.keras.callbacks.EarlyStopping('val_loss', patience=5, restore_best_weights=True)
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         filepath=bucket + f'/ckpts/cifar10-{model_name}-' + '{epoch:02d}-{val_accuracy:.4f}')
 
+    tf.summary.scalar('accuracy', 0.45, step=1)
+    tf.summary.create_file_writer('gs://tensorboard3/resnet-pipeline')
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(
+        log_dir='gs://tensorboard3/resnet-pipeline'
+        #histogram_freq=1
+    )
+
     # Train the model
-    history = model.fit(train_data, validation_data=valid_data, epochs=30, callbacks=[earlystop, checkpoint])
+    history = model.fit(train_data, validation_data=valid_data, epochs=30, callbacks=[earlystop, checkpoint, tensorboard_callback])
     #history = model.fit(train_data, validation_data=valid_data, epochs=10)
     print('\n\n history\n' + str(history) + '\n\n')
 
@@ -175,24 +197,27 @@ def train_model(text: str) -> str:
     description='testing pipeline',
     pipeline_root=pipeline_root_path
 )
-def ingestion_test():
+def resnet_pipeline():
     ingestion_task = ingest_data()
     # load_data_task = load_data(ingestion_task.output)
-    create_model_task = create_model(text=ingestion_task.output).set_accelerator_type('NVIDIA_TESLA_V100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(4)
-    #     text=ingestion_task.outputs['text'],
-    #     project='tensor-1-1')
-    # create_model_task = (
-    #     create_model(text=ingestion_task.outputs['text']),
-    #     set_cpu_limit('4'),
-    #     set_memory_limit('16G'),
-    #     add_node_selector_constraint('cloud.google.com/gke-accelerator', 'NVIDIA_TESLA_K80'),
-    #     set_gpu_limit(2)
-    # )
-    train_model_task = train_model(text=create_model_task.output).set_accelerator_type('NVIDIA_TESLA_V100').set_cpu_limit('4').set_memory_limit('16G').set_accelerator_limit(4)
+    create_model_task = create_model(text=ingestion_task.output)\
+        .set_accelerator_type('NVIDIA_TESLA_V100')\
+        .set_cpu_limit('2').set_memory_limit('16G')\
+        .set_accelerator_limit(2)
+    train_model_task = train_model(text=create_model_task.output).\
+        set_accelerator_type('NVIDIA_TESLA_V100').\
+        set_cpu_limit('2').set_memory_limit('16G')\
+        .set_accelerator_limit(2).set_display_name('2 x K100 GPUS ')
+    train_model_task_2 = train_model(text=create_model_task.output)\
+        .set_accelerator_type('NVIDIA_TESLA_K80')\
+        .set_cpu_limit('4')\
+        .set_memory_limit('16G')\
+        .set_accelerator_limit(4)\
+        .set_display_name('4 x K80 GPUS ')
 
 
 if __name__ == '__main__':
     compiler.Compiler().compile(
-        pipeline_func=ingestion_test,
+        pipeline_func=resnet_pipeline,
         package_path='pipeline.json'
     )
