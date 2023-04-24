@@ -1,0 +1,282 @@
+{
+  "components": {
+    "comp-create-model": {
+      "executorLabel": "exec-create-model",
+      "inputDefinitions": {
+        "parameters": {
+          "text": {
+            "parameterType": "STRING"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "parameters": {
+          "Output": {
+            "parameterType": "STRING"
+          }
+        }
+      }
+    },
+    "comp-ingest-data": {
+      "executorLabel": "exec-ingest-data",
+      "outputDefinitions": {
+        "parameters": {
+          "Output": {
+            "parameterType": "STRING"
+          }
+        }
+      }
+    },
+    "comp-train-model": {
+      "executorLabel": "exec-train-model",
+      "inputDefinitions": {
+        "parameters": {
+          "text": {
+            "parameterType": "STRING"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "parameters": {
+          "Output": {
+            "parameterType": "STRING"
+          }
+        }
+      }
+    },
+    "comp-train-model-2": {
+      "executorLabel": "exec-train-model-2",
+      "inputDefinitions": {
+        "parameters": {
+          "text": {
+            "parameterType": "STRING"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "parameters": {
+          "Output": {
+            "parameterType": "STRING"
+          }
+        }
+      }
+    }
+  },
+  "defaultPipelineRoot": "gs://pipeline-tester3",
+  "deploymentSpec": {
+    "executors": {
+      "exec-create-model": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "create_model"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow==2.11.0' 'keras' 'kfp==2.0.0-beta.14' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef create_model(text: str) -> str:\n    import tensorflow as tf\n    from keras import models, layers, datasets, applications\n\n    #bucket = 'gs://tfds-dir3'\n    #bucket = 'gs://pipeline-tester3/keras_model'\n    bucket = 'gs://workbench-ron-tensor'\n\n    # check for GPU:\n    print('\\n\\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))\n    print('\\n\\n')\n\n    #Multi GPU strategy\n    strategy = tf.distribute.MirroredStrategy()\n\n    with strategy.scope():\n        model = models.Sequential()\n        model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3)))\n        model.add(layers.MaxPooling2D((2, 2)))\n        model.add(layers.Conv2D(64, (3, 3), activation='relu'))\n        model.add(layers.MaxPooling2D((2, 2)))\n        model.add(layers.Conv2D(64, (3, 3), activation='relu'))\n        model.add(layers.Flatten())\n        model.add(layers.Dense(64, activation='relu'))\n        model.add(layers.Dense(10))\n\n    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])\n\n    print('\\n\\n' + str(model.summary()) + '\\n\\n')\n    model.save(bucket + \"/untrained-model\")\n    return \"model saved:\" + bucket\n\n"
+          ],
+          "image": "gcr.io/deeplearning-platform-release/tf-gpu.2-11",
+          "resources": {
+            "accelerator": {
+              "count": "4",
+              "type": "NVIDIA_TESLA_V100"
+            },
+            "cpuLimit": 4.0,
+            "memoryLimit": 16.0
+          }
+        }
+      },
+      "exec-ingest-data": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "ingest_data"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow==2.11.0' 'tensorflow-datasets' 'numpy==1.21.6' 'kfp==2.0.0-beta.14' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef ingest_data() -> str:\n    import tensorflow_datasets as tfds\n    import numpy as np\n    import tensorflow as tf\n\n    #bucket = 'gs://tfds-dir3'\n    #bucket = 'gs://pipeline-tester3/keras_model'\n    bucket = 'gs://workbench-ron-tensor'\n\n    (ds_train, ds_test), ds_info = tfds.load(\n        'cifar10',\n        split=['train', 'test'],\n        shuffle_files=True,\n        as_supervised=True,\n        with_info=True,\n    )\n\n    def normalize_img(image, label):\n        \"\"\"Normalizes images: `uint8` -> `float32`.\"\"\"\n        return tf.cast(image, tf.float32) / 255., label\n\n    ds_train = ds_train.map(\n        normalize_img, num_parallel_calls=tf.data.AUTOTUNE)\n    ds_train = ds_train.cache()\n    ds_train = ds_train.shuffle(ds_info.splits['train'].num_examples)\n    ds_train = ds_train.batch(128)\n    ds_train = ds_train.prefetch(tf.data.AUTOTUNE)\n\n    ds_test = ds_test.map(\n        normalize_img, num_parallel_calls=tf.data.AUTOTUNE)\n    ds_test = ds_test.batch(128)\n    ds_test = ds_test.cache()\n    ds_test = ds_test.prefetch(tf.data.AUTOTUNE)\n\n\n   # need the \"self\" parameter as their is an implicit argument in the custom_shard_func\n   #  that gives an error saying one arg expected but two were given\n    def custom_shard_func(self, element):\n        return np.int64(0)\n\n    ds_train.save(path=bucket + \"/ds_train\", shard_func=custom_shard_func)\n    ds_test.save(path=bucket + \"/ds_test\", shard_func=custom_shard_func)\n\n    return bucket\n\n"
+          ],
+          "image": "python:3.7"
+        }
+      },
+      "exec-train-model": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "train_model"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow==2.11.0' 'tensorflow-datasets' 'kfp==2.0.0-beta.14' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef train_model(text: str) -> str:\n    import tensorflow_datasets as tfds\n    import tensorflow as tf\n\n\n    # check for GPU:\n    print('\\n\\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))\n    print('\\n\\n')\n\n    #Storage buckets\n    # bucket = 'gs://tfds-dir3'\n    # bucket = 'gs://pipeline-tester3/keras_model'\n    bucket = 'gs://workbench-ron-tensor'\n\n    #Multi GPU strategy\n    strategy = tf.distribute.MirroredStrategy()\n\n\n\n    # load data from gcs bucket\n    ds_train = tf.data.Dataset.load(bucket + \"/ds_train\")\n    ds_test = tf.data.Dataset.load(bucket + \"/ds_test\")\n\n    print(\"\\n\\n finish loading training data\")\n    print(\"\\n\\n finish loading test data \\n\\n\")\n\n    # load model from gcs\n    model = tf.keras.models.load_model(bucket + '/untrained-model')\n\n    # Create and Train the model\n    model.compile(optimizer=tf.keras.optimizers.Adam(0.001),\n                  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),\n                  metrics=[tf.keras.metrics.SparseCategoricalAccuracy()])\n\n    history = model.fit(\n    ds_train,\n    epochs=30,\n    validation_data=ds_test,\n    )\n\n    print(\"\\n\\n history\" + str(history))\n\n    #Save the model\n    model.save(bucket + \"/keras_ model\")\n\n    return \"model trained\"\n\n"
+          ],
+          "image": "gcr.io/deeplearning-platform-release/tf-gpu.2-11",
+          "resources": {
+            "accelerator": {
+              "count": "4",
+              "type": "NVIDIA_TESLA_V100"
+            },
+            "cpuLimit": 4.0,
+            "memoryLimit": 16.0
+          }
+        }
+      },
+      "exec-train-model-2": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "train_model"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'tensorflow==2.11.0' 'tensorflow-datasets' 'kfp==2.0.0-beta.14' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef train_model(text: str) -> str:\n    import tensorflow_datasets as tfds\n    import tensorflow as tf\n\n\n    # check for GPU:\n    print('\\n\\n GPU name: ', tf.config.experimental.list_physical_devices('GPU'))\n    print('\\n\\n')\n\n    #Storage buckets\n    # bucket = 'gs://tfds-dir3'\n    # bucket = 'gs://pipeline-tester3/keras_model'\n    bucket = 'gs://workbench-ron-tensor'\n\n    #Multi GPU strategy\n    strategy = tf.distribute.MirroredStrategy()\n\n\n\n    # load data from gcs bucket\n    ds_train = tf.data.Dataset.load(bucket + \"/ds_train\")\n    ds_test = tf.data.Dataset.load(bucket + \"/ds_test\")\n\n    print(\"\\n\\n finish loading training data\")\n    print(\"\\n\\n finish loading test data \\n\\n\")\n\n    # load model from gcs\n    model = tf.keras.models.load_model(bucket + '/untrained-model')\n\n    # Create and Train the model\n    model.compile(optimizer=tf.keras.optimizers.Adam(0.001),\n                  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),\n                  metrics=[tf.keras.metrics.SparseCategoricalAccuracy()])\n\n    history = model.fit(\n    ds_train,\n    epochs=30,\n    validation_data=ds_test,\n    )\n\n    print(\"\\n\\n history\" + str(history))\n\n    #Save the model\n    model.save(bucket + \"/keras_ model\")\n\n    return \"model trained\"\n\n"
+          ],
+          "image": "gcr.io/deeplearning-platform-release/tf-gpu.2-11",
+          "resources": {
+            "accelerator": {
+              "count": "2",
+              "type": "NVIDIA_TESLA_V100"
+            },
+            "cpuLimit": 4.0,
+            "memoryLimit": 16.0
+          }
+        }
+      }
+    }
+  },
+  "pipelineInfo": {
+    "name": "simple-pipeline"
+  },
+  "root": {
+    "dag": {
+      "tasks": {
+        "create-model": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-create-model"
+          },
+          "dependentTasks": [
+            "ingest-data"
+          ],
+          "inputs": {
+            "parameters": {
+              "text": {
+                "taskOutputParameter": {
+                  "outputParameterKey": "Output",
+                  "producerTask": "ingest-data"
+                }
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "create-model"
+          }
+        },
+        "ingest-data": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-ingest-data"
+          },
+          "taskInfo": {
+            "name": "ingest-data"
+          }
+        },
+        "train-model": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-train-model"
+          },
+          "dependentTasks": [
+            "create-model"
+          ],
+          "inputs": {
+            "parameters": {
+              "text": {
+                "taskOutputParameter": {
+                  "outputParameterKey": "Output",
+                  "producerTask": "create-model"
+                }
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "4 x V100 GPUS "
+          }
+        },
+        "train-model-2": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-train-model-2"
+          },
+          "dependentTasks": [
+            "create-model"
+          ],
+          "inputs": {
+            "parameters": {
+              "text": {
+                "taskOutputParameter": {
+                  "outputParameterKey": "Output",
+                  "producerTask": "create-model"
+                }
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "2 x V100 GPUS "
+          }
+        }
+      }
+    },
+    "inputDefinitions": {
+      "parameters": {
+        "bucket": {
+          "defaultValue": "gs://workbench-ron-tensor",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "project": {
+          "defaultValue": "tensor-1-1",
+          "isOptional": true,
+          "parameterType": "STRING"
+        }
+      }
+    }
+  },
+  "schemaVersion": "2.1.0",
+  "sdkVersion": "kfp-2.0.0-beta.14"
+}
