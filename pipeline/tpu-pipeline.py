@@ -47,6 +47,7 @@ def ingest_data() -> str:
     def custom_shard_func(self, element):
         return np.int64(0)
 
+
     training_ds.save(
         path=bucket + "/train_ds", shard_func=custom_shard_func)
 

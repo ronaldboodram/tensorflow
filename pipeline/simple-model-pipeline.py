@@ -209,3 +209,18 @@ if __name__ == '__main__':
         pipeline_func=simple_pipeline,
         package_path='simple-model-pipeline.json'
     )
+
+# from google.cloud import aiplatform
+#
+# # Storage buckets
+# # bucket = 'gs://tfds-dir3'
+# bucket = 'gs://pipeline-tester3'
+# # bucket = 'gs://workbench-ron-tensor'
+# model_uri = bucket + "/simple_ model"
+#
+# my_model = aiplatform.Model.upload(display_name='cnn-model',
+#                                    artifact_uri=model_uri,
+#                                    serving_container_image_uri='us-docker.pkg.dev/vertex-ai/prediction/tf2-cpu.2-11:latest')
+#
+# print('model info' + str(my_model.model))
+
